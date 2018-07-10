@@ -19,6 +19,10 @@ recognizer = recog.Recognizer(recognizer_file)
 images_path = './images/'
 dist_treshold = 0.5
 
+print('Known faces')
+for face in recognizer.faces:
+    print('{} {}'.format(chr(face.id), face.name))
+
 def detect_faces(frame):
     dets = detector(frame, 0)
     dets = sorted(dets, key=lambda det: det.area())
@@ -64,7 +68,7 @@ def recognize_faces(frame, dets, descrs):
         if face == None or dist > dist_treshold:
             cv2.putText(frame, "{} / {:.2f}".format('???', dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
         else:
-            cv2.putText(frame, "{} / {:.2f}".format(face.name, dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+            cv2.putText(frame, "{} ({}) / {:.2f}".format(face.name, chr(face.id), dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
 
 def main():
     video = imtools.open_video(video_source)
