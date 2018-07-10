@@ -62,9 +62,9 @@ def recognize_faces(frame, dets, descrs):
         pts = imtools.dlib_rect2pts(det)
         x, y = pts[0]
         if face == None or dist > dist_treshold:
-            cv2.putText(frame, "{} / {:.2f}".format('???', dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
-            return
-        cv2.putText(frame, "{} / {:.2f}".format(face.name, dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+            cv2.putText(frame, "{} / {:.2f}".format('???', dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
+        else:
+            cv2.putText(frame, "{} / {:.2f}".format(face.name, dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
 
 def main():
     video = imtools.open_video(video_source)
