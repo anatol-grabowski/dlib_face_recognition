@@ -13,10 +13,12 @@ class Recognizer():
         if filename != None: self.load(filename)
 
     def update(self, id, descriptor, name=None):
-        face = next((f for f in self.faces if f.id == id), Face(id))
+        face = self.find(id)
+        if face == None:
+            face = Face(id)
+            self.faces.append(face)
         if name != None: face.name = name
         face.descriptors.append(descriptor)
-        self.faces.append(face)
         return face
 
     def match(self, descriptor):
