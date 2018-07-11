@@ -1,14 +1,15 @@
 import re
+import os
+import types
 import cv2
 import numpy as np
 
-def image_from_url(url, convert_to_bgr=False):
+def image_from_url(url, bgr=False):
     import urllib
     buff = urllib.request.urlopen(url).read()
     arr = np.frombuffer(buff, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if not convert_to_bgr:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if not bgr: img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
 
 def PIL2array(img):
@@ -42,7 +43,7 @@ def dlib_rect2pts(rect):
     return pts
 
 def rect2ellipse(rect):
-    # call: cv2.ellipse(frame, *imtools.rect2ellipse(rect), (255,0,0), 2, 1)
+    # usage: cv2.ellipse(frame, *imtools.rect2ellipse(rect), (255,0,0), 2, 1)
     p1 = (int(rect[0]), int(rect[1]))
     p2 = (int(rect[0] + rect[2]), int(rect[1] + rect[3]))
     c = (int(rect[0] + rect[2]/2), int(rect[1] + rect[3]/2))
@@ -57,7 +58,9 @@ def video_url_from_youtube(url):
     video_url = play.url
     return video_url
 
-def open_video(source):
+def open_sequence(source):
+    if os.path.isdir(source):
+        return (os.path.join(source, filename) for filename in os.listdir(source))
     re_youtube = '^https?://'
     if type(source) is str and re.match(re_youtube, source) != None:
         source = video_url_from_youtube(source)
@@ -65,9 +68,22 @@ def open_video(source):
     if not video.isOpened(): raise Error('Unable to open video from source {}'.format(source))
     return video
 
-def read_frame(video, bgr=False, vflip=False):
-    ok, frame = video.read()
-    if not ok: return
+def read_frame(source, bgr=False, vflip=False):
+    if type(source) == types.GeneratorType:
+        path = next(source, None)
+        if path == None: return
+        frame = open_image(path, bgr)
+    else:
+        ok, frame = source.read()
+        if not ok: return
+        if not bgr: frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     if vflip: frame = cv2.flip(frame, 1)
-    if not bgr: frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     return frame
+
+def open_image(source, bgr=False):
+    re_http_url = '^https?://'
+    if re.match(re_http_url, source) != None:
+        return image_from_url(source, bgr)
+    img = cv2.imread(source)
+    if not bgr: img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    return img

@@ -2,6 +2,7 @@ import cv2
 import dlib
 import numpy as np
 import sys
+import os
 import imtools
 import recog
 
@@ -11,17 +12,13 @@ window_name = 'recognition'
 
 dlib_models_path = './'
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(dlib_models_path + 'shape_predictor_5_face_landmarks.dat')
-describer = dlib.face_recognition_model_v1(dlib_models_path + 'dlib_face_recognition_resnet_model_v1.dat')
+predictor = dlib.shape_predictor(os.path.join(dlib_models_path, 'shape_predictor_5_face_landmarks.dat'))
+describer = dlib.face_recognition_model_v1(os.path.join(dlib_models_path, 'dlib_face_recognition_resnet_model_v1.dat'))
 
-recognizer_file = './recognizer.pickle'
+recognizer_file = 'recognizer.pickle'
 recognizer = recog.Recognizer(recognizer_file)
 images_path = './images/'
 dist_treshold = 0.5
-
-print('Known faces')
-for face in recognizer.faces:
-    print('{} {}'.format(chr(face.id), face.name))
 
 def detect_faces(frame):
     dets = detector(frame, 0)
@@ -42,23 +39,27 @@ def get_descriptors(frame, dets):
         descrs.append(descr)
     return descrs
 
+def format_face_text(face):
+    return '[{}] {}'.format(chr(face.id), face.name)
+
 def train_once(frame, det, descr, id):
     face = recognizer.update(id, descr)
     pts = imtools.dlib_rect2pts(det)
-    x, y = pts[0]
-    x2, y2 = pts[1]
-    face_img = frame[y:y2,x:x2]
-    filename = images_path + '{}-{}.jpeg'.format(face.name, str(np.random.randint(2**32)))
-    cv2.imwrite(filename, face_img)
-
-    cv2.putText(frame, "{} / {}".format(face.name, 'training'), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+    (x1, y1), (x2, y2) = pts
+    offset = x2 - x1
+    x1, x2 = np.clip([x1-offset, x2+offset], 0, frame.shape[1]-1)
+    y1, y2 = np.clip([y1-offset, y2+offset], 0, frame.shape[0]-1)
+    face_img = frame[y1:y2,x1:x2].copy()
+    cv2.putText(frame, "{} / {}".format(face.name, 'training'), (x1, y1-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
     cv2.rectangle(frame, *pts, (255, 0, 0), 2)
     cv2.imshow(window_name, frame)
     cv2.waitKey(1)
     if face.name == None:
         face.name = input('Enter name: ')
     recognizer.save(recognizer_file)
-    print('updated', face.name)
+    filename = os.path.join(images_path, '{}-{}.jpeg'.format(face.name, str(np.random.randint(2**32))))
+    cv2.imwrite(filename, face_img)
+    print('updated ' + format_face_text(face))
 
 def recognize_faces(frame, dets, descrs):
     for det, descr in zip(dets, descrs):
@@ -68,10 +69,18 @@ def recognize_faces(frame, dets, descrs):
         if face == None or dist > dist_treshold:
             cv2.putText(frame, "{} / {:.2f}".format('???', dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
         else:
-            cv2.putText(frame, "{} ({}) / {:.2f}".format(face.name, chr(face.id), dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+            cv2.putText(frame, format_face_text(face) + ' / {:.2f}'.format(dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
 
 def main():
-    video = imtools.open_video(video_source)
+    print('Known faces:')
+    for face in recognizer.faces:
+        print(format_face_text(face))
+
+    if not os.path.isdir(images_path):
+        os.makedirs(images_path)
+        print('Created directory for images at', images_path)
+
+    video = imtools.open_sequence(video_source)
     while True:
         frame = imtools.read_frame(video, bgr=True, vflip=video_vflip)
         if frame is None: return
@@ -81,7 +90,7 @@ def main():
 
         key = cv2.waitKey(1) & 0xff
         if key == 27: break
-        if ord('0') <= key <= ord('9'):
+        if ord('0') <= key <= ord('9') or ord('a') <= key <= ord('z'):
             if len(descrs) > 0:
                 det, descr, id = dets[0], descrs[0], key
                 train_once(frame, det, descr, id)

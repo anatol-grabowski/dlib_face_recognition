@@ -10,7 +10,12 @@ class Face():
 class Recognizer():
     def __init__(self, filename=None):
         self.faces = []
-        if filename != None: self.load(filename)
+        if filename == None: return
+        try:
+            self.load(filename)
+            print('Loaded recognizer from file')
+        except:
+            print('Recognizer file did not exist')
 
     def update(self, id, descriptor, name=None):
         face = self.find(id)
@@ -38,12 +43,8 @@ class Recognizer():
 
     def load(self, filename):
         faces = []
-        try:
-            file = open(filename, 'rb')
-            faces = pickle.load(file)
-            print('Loaded recognizer from file')
-        except:
-            print('Could not load recognizer from file, a new one will be created')
+        file = open(filename, 'rb')
+        faces = pickle.load(file)
         self.faces = faces
 
     def save(self, filename):
