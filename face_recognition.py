@@ -40,18 +40,19 @@ def get_descriptors(frame, dets):
     return descrs
 
 def format_face_text(face):
-    return '[{}] {}'.format(chr(face.id), face.name)
+    return '[{}] {}'.format(chr(face.id), face.name if face.name != None else '<Enter name in cmd>')
 
 def train_once(frame, det, descr, id):
     face = recognizer.update(id, descr)
     pts = imtools.dlib_rect2pts(det)
     (x1, y1), (x2, y2) = pts
+    x, y = x1, y1
     offset = x2 - x1
     x1, x2 = np.clip([x1-offset, x2+offset], 0, frame.shape[1]-1)
     y1, y2 = np.clip([y1-offset, y2+offset], 0, frame.shape[0]-1)
     face_img = frame[y1:y2,x1:x2].copy()
-    cv2.putText(frame, "{} / {}".format(face.name, 'training'), (x1, y1-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
-    cv2.rectangle(frame, *pts, (255, 0, 0), 2)
+    cv2.putText(frame, "{} / {}".format(format_face_text(face), 'training'), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+    cv2.rectangle(frame, *pts, (255, 0, 0), 3)
     cv2.imshow(window_name, frame)
     cv2.waitKey(1)
     if face.name == None:
@@ -99,6 +100,8 @@ def main():
         for det in dets:
             pts = imtools.dlib_rect2pts(det)
             cv2.rectangle(frame, *pts, (255, 0, 0), 1)
+            if det is dets[0]:
+                cv2.rectangle(frame, *pts, (255, 0, 0), 2)
         recognize_faces(frame, dets, descrs)
         cv2.imshow(window_name, frame)
     print('Done reading frames')
