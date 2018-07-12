@@ -46,7 +46,7 @@ def recognize_faces(frame, dets, dist_treshold):
 def learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists):
     min_score = 1.4
     ok_subdetector_ids = [0, 3, 4]
-    min_dist = 0.55
+    min_dist = 0.57
     new_faces = []
     for det, score, subdetector_id, face, descr, dist in zip(dets, scores, subdetector_ids, faces, descrs, dists):
         if face != None: continue
@@ -55,6 +55,7 @@ def learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists):
         id = np.random.randint(1e3, 1e4)
         face = train_once(frame, det, descr, id)
         new_faces.append(face)
+        return [face] # don't learn more than one new face from one frame for now, because train_once draws on frame
     return new_faces
 
 def format_face_text(face):
@@ -70,7 +71,7 @@ def train_once(frame, det, descr, id):
     x1, x2 = np.clip([x1-offset, x2+offset], 0, frame.shape[1]-1)
     y1, y2 = np.clip([y1-offset, y2+offset], 0, frame.shape[0]-1)
     face_img = frame[y1:y2,x1:x2].copy()
-    cv2.putText(frame, "{} / {}".format(format_face_text(face), 'training'), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+    cv2.putText(frame, "{} / {}".format(format_face_text(face), 'training'), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
     cv2.rectangle(frame, *pts, (255, 0, 0), 3)
     cv2.imshow(window_name, frame)
     cv2.waitKey(1)
@@ -92,8 +93,9 @@ def draw_results(frame, dets, faces, dists):
         if face == None:
             cv2.putText(frame, "{} / {:.2f}".format('???', dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
         else:
-            cv2.putText(frame, format_face_text(face) + ' / {:.2f}'.format(dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+            cv2.putText(frame, format_face_text(face) + ' / {:.2f}'.format(dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
     cv2.imshow(window_name, frame)
+    cv2.waitKey(1)
 
 def main():
     num_descrs = 0
@@ -116,13 +118,13 @@ def main():
         faces, descrs, dists = recognize_faces(frame, dets, dist_treshold)
         learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists)
 
-        key = cv2.waitKey(1) & 0xff
+        delay = 1 if type(video) != type((k for k in [])) else 100
+        key = cv2.waitKey(delay) & 0xff
         if key == 27: break
-        if ord('0') <= key <= ord('9') or ord('a') <= key <= ord('z'):
-            if len(descrs) > 0:
-                det, descr, id = dets[0], descrs[0], key
-                train_once(frame, det, descr, id)
-                continue
+        if (ord('0') <= key <= ord('9') or ord('a') <= key <= ord('z')) and len(descrs) > 0:
+            det, descr, id = dets[0], descrs[0], key
+            train_once(frame, det, descr, id)
+            continue
 
         draw_results(frame, dets, faces, dists)
 
