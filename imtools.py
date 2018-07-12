@@ -91,8 +91,8 @@ def open_image(source, bgr=False):
 
 def dlib_detect(frame, detector):
     import dlib
-    dets = detector(frame, 0)
-    dets = sorted(dets, key=lambda det: det.area())
+    dets, scores, idx = detector.run(frame, 0, 0.5)
+    dets = sorted(dets, key=lambda det: -det.area())
     dets = dlib.rectangles(dets)
     return dets
 
@@ -101,7 +101,7 @@ def cv_detect(frame, detector):
     if len(frame.shape) == 3:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     rects = detector.detectMultiScale(gray)
-    rects = sorted(rects, key=lambda rect: rect[0] * rect[1])
+    rects = sorted(rects, key=lambda rect: -rect[2] * rect[3])
     return rects
 
 def detect(frame, detector, do_return_dlib_rects):

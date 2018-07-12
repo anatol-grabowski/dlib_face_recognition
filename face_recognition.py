@@ -24,51 +24,42 @@ cv_cascades_path = '/_tot/projects/opencv/opencv-3.4.1/data/haarcascades/'
 face_cascade = cv2.CascadeClassifier(os.path.join(cv_cascades_path, 'haarcascade_frontalface_default.xml'))
 eye_cascade = cv2.CascadeClassifier(os.path.join(cv_cascades_path, 'haarcascade_eye.xml'))
 
-# from timefn import timefn
+def detect_faces(frame):
+    dets, scores, idx = detector.run(frame, 0, 0.2)
+    return dets, scores, idx
 
-
-
-# @timefn
-def check_if_face_straight(frame, det, shape):
-    points = np.array(list(map(lambda p: (p.x, p.y), shape.parts())))
-    p1, p2 = points[2], points[0]
-    (x1, y1), (x2, y2) = p1, p2
-    theta = np.arctan((x2-x1)/(y2-y1))
-    c, s = np.cos(theta), np.sin(theta)
-    rot_mat = np.array([[c, -s], [s,  c]])
-    p1 = np.dot(rot_mat, p1)
-    p2 = np.dot(rot_mat, p2)
-    pn = np.dot(rot_mat, points[4])
-    mid = p1[1] + (p2[1] - p1[1]) / 2
-    tolerance = np.abs(p2[1] - p1[1]) * 0.15
-    for p in shape.parts():
-        cv2.circle(frame, (p.x, p.y), 10, (0, 255, 0), 1)
-    if not (mid - tolerance <= pn[1] <= mid + tolerance):
-        return False
-
-    x, y, w, h = imtools.dlib_rect2cv_rect(det)
-    face_img = frame[y:y+h, x:x+w]
-    eyes = imtools.detect(frame_img, eye_cascade, False)
-
-    # print(eyes)
-    return True
-
-def get_descriptor(frame, dlib_rect):
-    shape = predictor(frame, dlib_rect)
-    # print(check_if_face_straight(frame, dlib_rect, shape))
-    descr = describer.compute_face_descriptor(frame, shape)
-    descr = np.array(descr)
-    return descr
-
-def get_descriptors(frame, dets):
+def recognize_faces(frame, dets, dist_treshold):
+    faces = []
     descrs = []
+    dists = []
     for det in dets:
-        descr = get_descriptor(frame, det)
+        shape = predictor(frame, det)
+        descr = describer.compute_face_descriptor(frame, shape)
+        descr = np.array(descr)
+        face, dist = recognizer.match(descr)
+        if dist > dist_treshold: face = None
+        faces.append(face)
         descrs.append(descr)
-    return descrs
+        dists.append(dist)
+    return faces, descrs, dists
+
+def learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists):
+    min_score = 1.4
+    ok_subdetector_ids = [0, 3, 4]
+    min_dist = 0.55
+    new_faces = []
+    for det, score, subdetector_id, face, descr, dist in zip(dets, scores, subdetector_ids, faces, descrs, dists):
+        if face != None: continue
+        if score < min_score or not subdetector_id in ok_subdetector_ids or dist < min_dist: continue
+        print('new face? score: {}, subdetector: {}, dist: {}'.format(score, subdetector_id, dist))
+        id = np.random.randint(1e3, 1e4)
+        face = train_once(frame, det, descr, id)
+        new_faces.append(face)
+    return new_faces
 
 def format_face_text(face):
-    return '[{}] {}'.format(chr(face.id), face.name if face.name != None else '<Enter name in cmd>')
+    id = "'{}'".format(chr(face.id)) if face.id < 1000 else face.id
+    return '[{}] {}'.format(id, face.name if face.name != None else '<Enter name in cmd>')
 
 def train_once(frame, det, descr, id):
     face = recognizer.update(id, descr)
@@ -89,16 +80,20 @@ def train_once(frame, det, descr, id):
     filename = os.path.join(images_path, '{}-{}.jpeg'.format(face.name, str(np.random.randint(2**32))))
     cv2.imwrite(filename, face_img)
     print('updated ' + format_face_text(face))
+    return face
 
-def recognize_faces(frame, dets, descrs):
-    for det, descr in zip(dets, descrs):
-        face, dist = recognizer.match(descr)
+def draw_results(frame, dets, faces, dists):
+    for det, face, dist in zip(dets, faces, dists):
         pts = imtools.dlib_rect2pts(det)
+        cv2.rectangle(frame, *pts, (255, 0, 0), 1)
+        if det is dets[0]:
+            cv2.rectangle(frame, *pts, (255, 0, 0), 2)
         x, y = pts[0]
-        if face == None or dist > dist_treshold:
+        if face == None:
             cv2.putText(frame, "{} / {:.2f}".format('???', dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0), 2)
         else:
             cv2.putText(frame, format_face_text(face) + ' / {:.2f}'.format(dist), (x, y-5), cv2.FONT_HERSHEY_PLAIN, 1.5, (0, 255, 0), 2)
+    cv2.imshow(window_name, frame)
 
 def main():
     num_descrs = 0
@@ -117,8 +112,9 @@ def main():
         frame = imtools.read_frame(video, bgr=True, vflip=video_vflip)
         if frame is None: return
 
-        dets = imtools.detect(frame, detector, True)
-        descrs = get_descriptors(frame, dets)
+        dets, scores, subdetector_ids = detect_faces(frame)
+        faces, descrs, dists = recognize_faces(frame, dets, dist_treshold)
+        learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists)
 
         key = cv2.waitKey(1) & 0xff
         if key == 27: break
@@ -128,13 +124,8 @@ def main():
                 train_once(frame, det, descr, id)
                 continue
 
-        for det in dets:
-            pts = imtools.dlib_rect2pts(det)
-            cv2.rectangle(frame, *pts, (255, 0, 0), 1)
-            if det is dets[0]:
-                cv2.rectangle(frame, *pts, (255, 0, 0), 2)
-        recognize_faces(frame, dets, descrs)
-        cv2.imshow(window_name, frame)
+        draw_results(frame, dets, faces, dists)
+
     print('Done reading frames')
 
 if __name__ == '__main__':
