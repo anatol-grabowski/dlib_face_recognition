@@ -87,3 +87,30 @@ def open_image(source, bgr=False):
     img = cv2.imread(source)
     if not bgr: img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
+
+
+def dlib_detect(frame, detector):
+    import dlib
+    dets = detector(frame, 0)
+    dets = sorted(dets, key=lambda det: det.area())
+    dets = dlib.rectangles(dets)
+    return dets
+
+def cv_detect(frame, detector):
+    gray = frame
+    if len(frame.shape) == 3:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    rects = detector.detectMultiScale(gray)
+    rects = sorted(rects, key=lambda rect: rect[0] * rect[1])
+    return rects
+
+def detect(frame, detector, do_return_dlib_rects):
+    if type(detector) == cv2.CascadeClassifier:
+        rects = cv_detect(frame, detector)
+        if do_return_dlib_rects:
+            rects = dlib.rectangles(list(map(cv_rect2dlib_rect, rects)))
+    else:
+        rects = dlib_detect(frame, detector)
+        if not do_return_dlib_rects:
+            rects = list(map(dlib_rect2cv_rect, rects))
+    return rects
