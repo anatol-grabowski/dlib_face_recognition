@@ -23,9 +23,14 @@ dist_treshold = 0.5
 cv_cascades_path = '/_tot/projects/opencv/opencv-3.4.1/data/haarcascades/'
 face_cascade = cv2.CascadeClassifier(os.path.join(cv_cascades_path, 'haarcascade_frontalface_default.xml'))
 eye_cascade = cv2.CascadeClassifier(os.path.join(cv_cascades_path, 'haarcascade_eye.xml'))
+ask_for_names = True
+auto_learn = False
+min_score = 1.4
+ok_subdetector_ids = [0, 3, 4]
+min_dist = 0.57
 
 def detect_faces(frame):
-    dets, scores, idx = detector.run(frame, 0, 0.2)
+    dets, scores, idx = detector.run(frame, 1, 0.2)
     return dets, scores, idx
 
 def recognize_faces(frame, dets, dist_treshold):
@@ -44,16 +49,13 @@ def recognize_faces(frame, dets, dist_treshold):
     return faces, descrs, dists
 
 def learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists):
-    min_score = 1.4
-    ok_subdetector_ids = [0, 3, 4]
-    min_dist = 0.57
     new_faces = []
     for det, score, subdetector_id, face, descr, dist in zip(dets, scores, subdetector_ids, faces, descrs, dists):
         if face != None: continue
-        if score < min_score or not subdetector_id in ok_subdetector_ids or dist < min_dist: continue
+        if score < min_score or subdetector_id not in ok_subdetector_ids or dist < min_dist: continue
         print('new face? score: {}, subdetector: {}, dist: {}'.format(score, subdetector_id, dist))
         id = np.random.randint(1e3, 1e4)
-        face = train_once(frame, det, descr, id)
+        face = train_once(frame, det, descr, id, ask_for_names)
         new_faces.append(face)
         return [face] # don't learn more than one new face from one frame for now, because train_once draws on frame
     return new_faces
@@ -62,7 +64,7 @@ def format_face_text(face):
     id = "'{}'".format(chr(face.id)) if face.id < 1000 else face.id
     return '[{}] {}'.format(id, face.name if face.name != None else '<Enter name in cmd>')
 
-def train_once(frame, det, descr, id):
+def train_once(frame, det, descr, id, ask_name=True):
     face = recognizer.update(id, descr)
     pts = imtools.dlib_rect2pts(det)
     (x1, y1), (x2, y2) = pts
@@ -75,7 +77,7 @@ def train_once(frame, det, descr, id):
     cv2.rectangle(frame, *pts, (255, 0, 0), 3)
     cv2.imshow(window_name, frame)
     cv2.waitKey(1)
-    if face.name == None:
+    if face.name == None and ask_name:
         face.name = input('Enter name: ')
     recognizer.save(recognizer_file)
     filename = os.path.join(images_path, '{}-{}.jpeg'.format(face.name, str(np.random.randint(2**32))))
@@ -116,7 +118,8 @@ def main():
 
         dets, scores, subdetector_ids = detect_faces(frame)
         faces, descrs, dists = recognize_faces(frame, dets, dist_treshold)
-        learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists)
+        if auto_learn:
+            learn_new_faces(frame, dets, scores, subdetector_ids, faces, descrs, dists)
 
         delay = 1 if type(video) != type((k for k in [])) else 100
         key = cv2.waitKey(delay) & 0xff
